@@ -1,0 +1,149 @@
+
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <dirent.h>
+#include <sys/stat.h>
+
+#define MAX_LIGNE 1024
+
+/* ============================================
+   Options globales
+   ============================================ */
+int opt_recursif    = 0;  /* -r */
+int opt_occurrence  = 0;  /* -o */
+
+/* ============================================
+   Afficher uniquement la partie correspondante
+   option -o
+   ============================================ */
+void afficher_occurrence(const char *ligne, const char *motif) {
+    char *pos = strstr(ligne, motif);
+    while (pos != NULL) {
+        /* Afficher uniquement le motif trouvé */
+        printf("%.*s\n", (int)strlen(motif), pos);
+        pos = strstr(pos + strlen(motif), motif);
+    }
+}
+
+/* ============================================
+   Rechercher le motif dans un fichier
+   ============================================ */
+void rechercher_fichier(const char *filename, const char *motif) {
+    FILE *f;
+    char ligne[MAX_LIGNE];
+
+    f = fopen(filename, "r");
+    if (f == NULL) {
+        perror("Erreur lors de l'ouverture");
+        return;
+    }
+
+    while (fgets(ligne, sizeof(ligne), f) != NULL) {
+        if (strstr(ligne, motif) != NULL) {
+            if (opt_occurrence) {
+                /* -o : afficher uniquement la partie correspondante */
+                afficher_occurrence(ligne, motif);
+            } else {
+                /* Affichage normal */
+                printf("%s:%s", filename, ligne);
+            }
+        }
+    }
+
+    fclose(f);
+}
+
+/* ============================================
+   Recherche récursive dans un dossier
+   option -r
+   ============================================ */
+void rechercher_recursif(const char *dossier, const char *motif) {
+    DIR *dir;
+    struct dirent *entree;
+    struct stat info;
+    char chemin[MAX_LIGNE];
+
+    dir = opendir(dossier);
+    if (dir == NULL) {
+        perror("Erreur lors de l'ouverture du dossier");
+        return;
+    }
+
+    while ((entree = readdir(dir)) != NULL) {
+        /* Ignorer . et .. */
+        if (strcmp(entree->d_name, ".") == 0 ||
+            strcmp(entree->d_name, "..") == 0)
+            continue;
+
+        /* Construire le chemin complet */
+        snprintf(chemin, sizeof(chemin), "%s/%s", dossier, entree->d_name);
+
+        /* Vérifier si c'est un dossier ou un fichier */
+        if (stat(chemin, &info) == 0) {
+            if (S_ISDIR(info.st_mode)) {
+                /* C'est un dossier → récursion */
+                rechercher_recursif(chemin, motif);
+            } else if (S_ISREG(info.st_mode)) {
+                /* C'est un fichier → rechercher */
+                rechercher_fichier(chemin, motif);
+            }
+        }
+    }
+
+    closedir(dir);
+}
+
+/* ============================================
+   Afficher l'aide
+   ============================================ */
+void afficher_aide(const char *prog) {
+    fprintf(stderr, "Usage: %s [-r] [-o] <motif> <fichier|dossier>\n", prog);
+    fprintf(stderr, "  -r : recherche recursive dans un dossier\n");
+    fprintf(stderr, "  -o : afficher uniquement la partie correspondante\n");
+}
+
+/* ============================================
+   Fonction principale
+   ============================================ */
+int main(int argc, char *argv[]) {
+    int opt;
+    int i;
+
+    printf("Nombre d'arguments: %d\n", argc);
+
+    /* Lecture des options -r et -o */
+    for (i = 1; i < argc; i++) {
+        if (argv[i][0] == '-') {
+            int j;
+            for (j = 1; argv[i][j] != '\0'; j++) {
+                if (argv[i][j] == 'r') opt_recursif   = 1;
+                if (argv[i][j] == 'o') opt_occurrence = 1;
+            }
+        } else {
+            break;
+        }
+    }
+
+    /* Vérification des arguments obligatoires */
+    if (i + 1 >= argc) {
+        afficher_aide(argv[0]);
+        return EXIT_FAILURE;
+    }
+
+    char *motif  = argv[i];
+    char *cible  = argv[i + 1];
+
+    /* Lancer la recherche */
+    if (opt_recursif) {
+        /* -r : recherche récursive dans un dossier */
+        rechercher_recursif(cible, motif);
+    } else {
+        /* Recherche simple dans un fichier */
+        rechercher_fichier(cible, motif);
+    }
+
+    return EXIT_SUCCESS;
+}
+
