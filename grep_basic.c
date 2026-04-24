@@ -8,37 +8,29 @@ int main (int argc, char *argv[])
 {
     FILE *f;
     char ligne[max_ligne];
-    printf("Nombre d'arguments: %d\n", argc);
     if (argc < 3)
     {
-        fprintf(stderr, "Nombre d'arguments insuffisant, ecrire : %s <motif> <fichier>", argv[0]);
+        fprintf(stderr, "Nombre d'arguments insuffisant, ecrire : %s [OPTION]... MOTIFS [FICHIER]...\n Try \'grep --help\' for more information. ", argv[0]);
         return EXIT_FAILURE;
     }
-    
-
-    //
+    //if we have mygrep pattern file
     if (argc==3) 
     {
         char *motif=argv[1];
         char *filename=argv[2];
-
         f=fopen(filename, "r");
 
-        if (f==NULL)
-        {
+        if (f==NULL){
             perror("Erreur lors de l'ouverture");
             return EXIT_FAILURE;
         }
-
-        while (!feof(f))
-        {
+        while (!feof(f)){
             while (fgets(ligne, sizeof(ligne), f)!= NULL){
                 if (strstr(ligne, motif)!=NULL)
                     printf("%s", ligne);
             }
         }
-
+        fclose(f);
     }
     return EXIT_SUCCESS;
-
 }
