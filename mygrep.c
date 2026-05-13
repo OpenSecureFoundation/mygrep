@@ -3,27 +3,71 @@
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
+#include <regex.h>
 
 #define MAX_LIGNE  1024
 #define MAX_MOTIFS 10
 
 /* Variables globales */
-int opt_recursif   = 0;
-int opt_occurrence = 0;
+int opt_recursif      = 0;  /* -r */
+int opt_occurrence    = 0;  /* -o */
+int opt_ligne_entiere = 0;  /* -x */
+int opt_perl_regex    = 0;  /* -P */
+
 char *motifs[MAX_MOTIFS];
 int   nb_motifs = 0;
 
-/* Cherche le motif dans une ligne */
+/* ============================================
+   -x : vérifier si la ligne entière correspond
+   ============================================ */
+int correspond_x(const char *ligne, const char *motif) {
+    char ligne_propre[MAX_LIGNE];
+    strncpy(ligne_propre, ligne, MAX_LIGNE);
+    ligne_propre[strcspn(ligne_propre, "\n")] = '\0';
+    return strcmp(ligne_propre, motif) == 0;
+}
+
+/* ============================================
+   -P : vérifier avec une regex
+   ============================================ */
+int correspond_regex(const char *ligne, const char *motif) {
+    regex_t regex;
+    int     resultat;
+
+    resultat = regcomp(&regex, motif, REG_EXTENDED);
+    if (resultat != 0) {
+        fprintf(stderr, "Erreur : motif regex invalide\n");
+        return 0;
+    }
+
+    resultat = regexec(&regex, ligne, 0, NULL, 0);
+    regfree(&regex);
+    return resultat == 0;
+}
+
+/* ============================================
+   Vérifier si la ligne correspond au motif
+   ============================================ */
 int correspond(const char *ligne) {
     int i;
     for (i = 0; i < nb_motifs; i++) {
-        if (strstr(ligne, motifs[i]) != NULL)
-            return 1;
+        if (opt_perl_regex) {
+            if (correspond_regex(ligne, motifs[i]))
+                return 1;
+        } else if (opt_ligne_entiere) {
+            if (correspond_x(ligne, motifs[i]))
+                return 1;
+        } else {
+            if (strstr(ligne, motifs[i]) != NULL)
+                return 1;
+        }
     }
     return 0;
 }
 
-/* Affiche uniquement le motif trouvé (-o) */
+/* ============================================
+   Afficher uniquement le motif trouvé (-o)
+   ============================================ */
 void afficher_occurrence(const char *ligne) {
     int i;
     for (i = 0; i < nb_motifs; i++) {
@@ -35,7 +79,9 @@ void afficher_occurrence(const char *ligne) {
     }
 }
 
-/* Recherche dans un fichier */
+/* ============================================
+   Rechercher dans un fichier
+   ============================================ */
 void rechercher_fichier(const char *fichier) {
     FILE *f;
     char  ligne[MAX_LIGNE];
@@ -58,7 +104,9 @@ void rechercher_fichier(const char *fichier) {
     fclose(f);
 }
 
-/* Recherche recursive dans un dossier (-r) */
+/* ============================================
+   Recherche récursive (-r)
+   ============================================ */
 void rechercher_recursif(const char *dossier) {
     DIR           *dir;
     struct dirent *entree;
@@ -89,7 +137,9 @@ void rechercher_recursif(const char *dossier) {
     closedir(dir);
 }
 
-/* Fonction principale */
+/* ============================================
+   Fonction principale
+   ============================================ */
 int main(int argc, char *argv[]) {
     int i;
 
@@ -104,6 +154,10 @@ int main(int argc, char *argv[]) {
             opt_recursif = 1;
         } else if (strcmp(argv[i], "-o") == 0) {
             opt_occurrence = 1;
+        } else if (strcmp(argv[i], "-x") == 0) {
+            opt_ligne_entiere = 1;
+        } else if (strcmp(argv[i], "-P") == 0) {
+            opt_perl_regex = 1;
         } else {
             break;
         }
@@ -111,7 +165,7 @@ int main(int argc, char *argv[]) {
 
     if (nb_motifs == 0 || i >= argc) {
         fprintf(stderr,
-            "Usage: %s [-r] [-o] -e <motif> <fichier|dossier>\n",
+            "Usage: %s [-r] [-o] [-x] [-P] -e <motif> <fichier|dossier>\n",
             argv[0]);
         return EXIT_FAILURE;
     }
