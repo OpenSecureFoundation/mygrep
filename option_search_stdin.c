@@ -1,0 +1,36 @@
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#define max_ligne 1024
+
+
+int main (int argc, char *argv[])
+{
+    FILE *f;
+    char ligne[max_ligne];
+    if (argc < 1)
+    {
+        fprintf(stderr, "Nombre d'arguments insuffisant, ecrire : %s [OPTION]... MOTIFS [FICHIER]...\n Try \'grep --help\' for more information. ", argv[0]);
+        return EXIT_FAILURE;
+    }
+    
+    //if we have mygrep pattern file
+    if (argc==2) 
+    {
+        char *motif=argv[1];
+        f=stdin;
+        if (f==NULL){
+            perror("Erreur lors de l'ouverture");
+            return EXIT_FAILURE;
+        }
+        while (!feof(f)){
+            while (fgets(ligne, sizeof(ligne), f)!= NULL){
+                if (strstr(ligne, motif)!=NULL)
+                    printf("%s", ligne);
+            }
+        }
+        fclose(f);
+    }
+    return EXIT_SUCCESS;
+
+}
