@@ -1,0 +1,6 @@
+erreur de connexion detectee
+Le serveur fonctionne normalement
+Erreur critique sur le port 8080
+connexion etablie avec succes
+erreur mineure ignoree
+Fin du fichier log
