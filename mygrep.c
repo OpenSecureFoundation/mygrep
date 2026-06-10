@@ -1,232 +1,181 @@
-#include<stdio.h>
-#include<stdlib.h>
-#include<string.h>
-#include<ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <dirent.h>
+#include <sys/stat.h>
+#include <regex.h>
 
-#define max_ligne 1024
-#define MAX_BUFFER 100
+#define MAX_LIGNE  1024
+#define MAX_MOTIFS 10
 
-// 🔹 fonction minuscule (-i)
-void to_lowercase(char* str)
-{
-    for (int i = 0; str[i]; i++) {
-        str[i] = tolower(str[i]);
+/* Variables globales */
+int opt_recursif      = 0;  /* -r */
+int opt_occurrence    = 0;  /* -o */
+int opt_ligne_entiere = 0;  /* -x */
+int opt_perl_regex    = 0;  /* -P */
+
+char *motifs[MAX_MOTIFS];
+int   nb_motifs = 0;
+
+/* ============================================
+   -x : vérifier si la ligne entière correspond
+   ============================================ */
+int correspond_x(const char *ligne, const char *motif) {
+    char ligne_propre[MAX_LIGNE];
+    strncpy(ligne_propre, ligne, MAX_LIGNE);
+    ligne_propre[strcspn(ligne_propre, "\n")] = '\0';
+    return strcmp(ligne_propre, motif) == 0;
+}
+
+/* ============================================
+   -P : vérifier avec une regex
+   ============================================ */
+int correspond_regex(const char *ligne, const char *motif) {
+    regex_t regex;
+    int     resultat;
+
+    resultat = regcomp(&regex, motif, REG_EXTENDED);
+    if (resultat != 0) {
+        fprintf(stderr, "Erreur : motif regex invalide\n");
+        return 0;
+    }
+
+    resultat = regexec(&regex, ligne, 0, NULL, 0);
+    regfree(&regex);
+    return resultat == 0;
+}
+
+/* ============================================
+   Vérifier si la ligne correspond au motif
+   ============================================ */
+int correspond(const char *ligne) {
+    int i;
+    for (i = 0; i < nb_motifs; i++) {
+        if (opt_perl_regex) {
+            if (correspond_regex(ligne, motifs[i]))
+                return 1;
+        } else if (opt_ligne_entiere) {
+            if (correspond_x(ligne, motifs[i]))
+                return 1;
+        } else {
+            if (strstr(ligne, motifs[i]) != NULL)
+                return 1;
+        }
+    }
+    return 0;
+}
+
+/* ============================================
+   Afficher uniquement le motif trouvé (-o)
+   ============================================ */
+void afficher_occurrence(const char *ligne) {
+    int i;
+    for (i = 0; i < nb_motifs; i++) {
+        char *pos = strstr(ligne, motifs[i]);
+        while (pos != NULL) {
+            printf("%.*s\n", (int)strlen(motifs[i]), pos);
+            pos = strstr(pos + strlen(motifs[i]), motifs[i]);
+        }
     }
 }
 
-// 🔹 vérifier extension (--include / --exclude)
-int has_extension(const char* filename, const char* ext)
-{
-    return strstr(filename, ext) != NULL;
-}
+/* ============================================
+   Rechercher dans un fichier
+   ============================================ */
+void rechercher_fichier(const char *fichier) {
+    FILE *f;
+    char  ligne[MAX_LIGNE];
 
-int main(int argc, char* argv[])
-{
-    FILE* f;
-    char ligne[max_ligne];
-
-    // 🔹 options existantes
-    int ignore_case = 0;
-    int after = 0, before = 0;
-
-    char* include_ext = NULL;
-    char* exclude_ext = NULL;
-
-    // 🔹 nouvelle fonctionnalité -m
-    int max_matches = -1;
-    int match_count = 0;
-
-    // 🔹 nouvelle fonctionnalité -b
-    int show_byte_offset = 0;
-    long byte_offset = 0;
-
-    // 🔹 group separator
-    char* group_separator = "--";
-    int no_group_separator = 0;
-    int first_match = 1;
-
-    int arg_index = 1;
-
-    // 🔹 analyse des options
-    while (arg_index < argc && argv[arg_index][0] == '-') {
-
-        // 🔹 -i
-        if (strcmp(argv[arg_index], "-i") == 0) {
-            ignore_case = 1;
-        }
-
-        // 🔹 -A
-        else if (strcmp(argv[arg_index], "-A") == 0) {
-            after = atoi(argv[++arg_index]);
-        }
-
-        // 🔹 -B
-        else if (strcmp(argv[arg_index], "-B") == 0) {
-            before = atoi(argv[++arg_index]);
-        }
-
-        // 🔹 -C
-        else if (strcmp(argv[arg_index], "-C") == 0) {
-            after = before = atoi(argv[++arg_index]);
-        }
-
-        // 🔹 --include
-        else if (strcmp(argv[arg_index], "--include") == 0) {
-            include_ext = argv[++arg_index];
-        }
-
-        // 🔹 --exclude
-        else if (strcmp(argv[arg_index], "--exclude") == 0) {
-            exclude_ext = argv[++arg_index];
-        }
-
-        // 🔹 -m
-        else if (strcmp(argv[arg_index], "-m") == 0) {
-            max_matches = atoi(argv[++arg_index]);
-        }
-
-        // 🔹 -b
-        else if (strcmp(argv[arg_index], "-b") == 0) {
-            show_byte_offset = 1;
-        }
-
-        // 🔹 --group-separator
-        else if (strcmp(argv[arg_index], "--group-separator") == 0) {
-            group_separator = argv[++arg_index];
-        }
-
-        // 🔹 --no-group-separator
-        else if (strcmp(argv[arg_index], "--no-group-separator") == 0) {
-            no_group_separator = 1;
-        }
-
-        arg_index++;
+    f = fopen(fichier, "r");
+    if (f == NULL) {
+        perror("Erreur ouverture fichier");
+        return;
     }
 
-    // 🔹 vérification arguments
-    if (argc - arg_index < 2)
-    {
+    while (fgets(ligne, sizeof(ligne), f) != NULL) {
+        ligne[strcspn(ligne, "\n")] = '\0';
+        if (correspond(ligne)) {
+            if (opt_occurrence)
+                afficher_occurrence(ligne);
+            else
+                printf("%s: %s\n", fichier, ligne);
+        }
+    }
+    fclose(f);
+}
+
+/* ============================================
+   Recherche récursive (-r)
+   ============================================ */
+void rechercher_recursif(const char *dossier) {
+    DIR           *dir;
+    struct dirent *entree;
+    struct stat    info;
+    char           chemin[MAX_LIGNE];
+
+    dir = opendir(dossier);
+    if (dir == NULL) {
+        perror("Erreur ouverture dossier");
+        return;
+    }
+
+    while ((entree = readdir(dir)) != NULL) {
+        if (strcmp(entree->d_name, ".") == 0 ||
+            strcmp(entree->d_name, "..") == 0)
+            continue;
+
+        snprintf(chemin, sizeof(chemin), "%s/%s",
+                 dossier, entree->d_name);
+
+        if (stat(chemin, &info) == 0) {
+            if (S_ISDIR(info.st_mode))
+                rechercher_recursif(chemin);
+            else if (S_ISREG(info.st_mode))
+                rechercher_fichier(chemin);
+        }
+    }
+    closedir(dir);
+}
+
+/* ============================================
+   Fonction principale
+   ============================================ */
+int main(int argc, char *argv[]) {
+    int i;
+
+    for (i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-e") == 0) {
+            i++;
+            if (i < argc) {
+                motifs[nb_motifs] = argv[i];
+                nb_motifs++;
+            }
+        } else if (strcmp(argv[i], "-r") == 0) {
+            opt_recursif = 1;
+        } else if (strcmp(argv[i], "-o") == 0) {
+            opt_occurrence = 1;
+        } else if (strcmp(argv[i], "-x") == 0) {
+            opt_ligne_entiere = 1;
+        } else if (strcmp(argv[i], "-P") == 0) {
+            opt_perl_regex = 1;
+        } else {
+            break;
+        }
+    }
+
+    if (nb_motifs == 0 || i >= argc) {
         fprintf(stderr,
-            "Usage: %s [OPTIONS] motif fichier...\n",
+            "Usage: %s [-r] [-o] [-x] [-P] -e <motif> <fichier|dossier>\n",
             argv[0]);
-
         return EXIT_FAILURE;
     }
 
-    // 🔹 récupération motif
-    char* motif = argv[arg_index++];
+    char *cible = argv[i];
 
-    // 🔹 copie motif pour -i
-    char motif_lower[100];
-    strcpy(motif_lower, motif);
-
-    if (ignore_case)
-        to_lowercase(motif_lower);
-
-    // 🔹 buffer pour -B
-    char buffer[MAX_BUFFER][max_ligne];
-    int line_count = 0;
-
-    // 🔹 parcours fichiers
-    for (int i = arg_index; i < argc; i++) {
-
-        char* filename = argv[i];
-
-        // 🔹 include
-        if (include_ext &&
-            !has_extension(filename, include_ext))
-            continue;
-
-        // 🔹 exclude
-        if (exclude_ext &&
-            has_extension(filename, exclude_ext))
-            continue;
-
-        f = fopen(filename, "r");
-
-        if (f == NULL) {
-            perror("Erreur ouverture fichier");
-            continue;
-        }
-
-        printf("\n=== %s ===\n", filename);
-
-        // 🔹 lecture ligne par ligne
-        while (fgets(ligne, sizeof(ligne), f) != NULL) {
-
-            // 🔹 sauvegarde position byte
-            long current_offset = byte_offset;
-
-            // 🔹 mise à jour offset
-            byte_offset += strlen(ligne);
-
-            // 🔹 stocker ligne pour -B
-            strcpy(buffer[line_count % MAX_BUFFER], ligne);
-            line_count++;
-
-            // 🔹 copie temporaire
-            char temp[max_ligne];
-            strcpy(temp, ligne);
-
-            // 🔹 gestion -i
-            if (ignore_case)
-                to_lowercase(temp);
-
-            // 🔹 recherche motif
-            if (strstr(ignore_case ? temp : ligne,
-                ignore_case ? motif_lower : motif)) {
-
-                // 🔹 gestion -m
-                if (max_matches != -1 &&
-                    match_count >= max_matches)
-                    break;
-
-                // 🔹 séparateur groupes
-                if (!first_match &&
-                    !no_group_separator) {
-
-                    printf("%s\n", group_separator);
-                }
-
-                first_match = 0;
-
-                // 🔹 afficher lignes avant (-B)
-                for (int j = line_count - before - 1;
-                    j < line_count - 1;
-                    j++) {
-
-                    if (j >= 0)
-                        printf("%s",
-                            buffer[j % MAX_BUFFER]);
-                }
-
-                // 🔹 afficher offset (-b)
-                if (show_byte_offset)
-                    printf("%ld:", current_offset);
-
-                // 🔹 ligne trouvée
-                printf("%s", ligne);
-
-                // 🔹 compteur matches
-                match_count++;
-
-                // 🔹 afficher lignes après (-A)
-                for (int k = 0; k < after; k++) {
-
-                    if (fgets(ligne,
-                        sizeof(ligne),
-                        f)) {
-
-                        byte_offset += strlen(ligne);
-
-                        printf("%s", ligne);
-                    }
-                }
-            }
-        }
-
-        fclose(f);
-    }
+    if (opt_recursif)
+        rechercher_recursif(cible);
+    else
+        rechercher_fichier(cible);
 
     return EXIT_SUCCESS;
 }
