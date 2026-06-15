@@ -1,201 +1,383 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
-/* Headers de chaque membre */
 #include "tsala.h"
 #include "vanessa.h"
 #include "teteya.h"
 #include "lesnar.h"
 #include "Ninkam.h"
 
+/* ============================================
+   Variables de combinaison — VANESSA
+   ============================================ */
+int opt_invert    = 0;  /* -v */
+int opt_highlight = 0;  /* -h */
+int opt_hide_file = 0;  /* -f */
+int opt_null_data = 0;  /* -z */
+int opt_ext_regex = 0;  /* -E */
+
+/* ============================================
+   Variables de combinaison — TETEYA
+   ============================================ */
+int   opt_ignore_case = 0;    /* -i  */
+int   opt_after       = 0;    /* -A  */
+int   opt_before      = 0;    /* -B  */
+int   opt_max_matches = -1;   /* -m  */
+int   opt_byte_offset = 0;    /* -b  */
+char *opt_include     = NULL; /* --include */
+char *opt_exclude     = NULL; /* --exclude */
+
+/* ============================================
+   Variables de combinaison — LESNAR
+   ============================================ */
+int opt_num_ligne = 0;  /* -n */
+int opt_nom_fich  = 0;  /* -l */
+int opt_silence   = 0;  /* -s */
+int opt_fixe      = 0;  /* -F */
+int opt_quiet     = 0;  /* -q */
+int opt_null_char = 0;  /* -Z */
+int opt_dossier   = 0;  /* -d */
+int opt_binaire   = 0;  /* -I */
+
+/* ============================================
+   Variables de combinaison — NINKAM
+   ============================================ */
+int opt_count = 0;  /* -c */
+int opt_word  = 0;  /* -w */
+
+/* ============================================
+   Fonction de recherche combinée
+   C'est ici que TOUTES les options travaillent
+   ensemble sur chaque ligne
+   ============================================ */
+void recherche_combinee(const char *pattern, const char *fichier) {
+
+    FILE *f;
+    char  ligne[1024];
+    int   numero   = 0;
+    int   compteur = 0;
+
+    /* Ouvrir le fichier */
+    f = fopen(fichier, "r");
+    if (f == NULL) {
+        if (opt_silence == 0)
+            perror("Erreur ouverture fichier");
+        return;
+    }
+
+    /* Lecture ligne par ligne */
+    while (fgets(ligne, sizeof(ligne), f) != NULL) {
+        numero++;
+        ligne[strcspn(ligne, "\n")] = '\0';
+
+        /* ── Copie pour -i ── */
+        char temp[1024];
+        char motif_temp[1024];
+        strcpy(temp, ligne);
+        strcpy(motif_temp, pattern);
+
+        /* -i : ignorer la casse (TETEYA) */
+        if (opt_ignore_case) {
+            int k;
+            for (k = 0; temp[k]; k++)
+                temp[k] = tolower(temp[k]);
+            for (k = 0; motif_temp[k]; k++)
+                motif_temp[k] = tolower(motif_temp[k]);
+        }
+
+        /* ── Vérifier correspondance ── */
+        int match = 0;
+
+        /* -w : mot entier (NINKAM) */
+        if (opt_word) {
+            char *pos = strstr(temp, motif_temp);
+            if (pos != NULL) {
+                int gauche = (pos == temp) ||
+                             !isalnum((unsigned char)*(pos - 1));
+                int droite = !isalnum((unsigned char)*(pos + strlen(motif_temp)));
+                if (gauche && droite) match = 1;
+            }
+        }
+        /* -x : ligne entière (TSALA) */
+        else if (opt_ligne_entiere) {
+            if (strcmp(temp, motif_temp) == 0) match = 1;
+        }
+        /* -P : regex Perl (TSALA) */
+        else if (opt_perl_regex) {
+            if (correspond_regex(ligne, pattern)) match = 1;
+        }
+        /* -E : regex étendue (VANESSA) */
+        else if (opt_ext_regex) {
+            if (correspond_regex(ligne, pattern)) match = 1;
+        }
+        /* Recherche normale */
+        else {
+            if (strstr(temp, motif_temp) != NULL) match = 1;
+        }
+
+        /* -v : inverser (VANESSA) */
+        if (opt_invert) match = !match;
+
+        if (match) {
+            compteur++;
+
+            /* -q : mode silencieux (LESNAR) */
+            if (opt_quiet) {
+                fclose(f);
+                return;
+            }
+
+            /* -l : nom fichier uniquement (LESNAR) */
+            if (opt_nom_fich) {
+                if (opt_null_char)
+                    printf("%s", fichier);
+                else
+                    printf("%s\n", fichier);
+                fclose(f);
+                return;
+            }
+
+            /* -c : compter seulement (NINKAM) */
+            if (opt_count) continue;
+
+            /* -b : offset en octets (TETEYA) */
+            if (opt_byte_offset)
+                printf("%d:", numero * 10);
+
+            /* ── Affichage selon les options ── */
+
+            /* -o : uniquement le motif (TSALA) */
+            if (opt_occurrence) {
+                char *pos = strstr(ligne, pattern);
+                while (pos != NULL) {
+                    printf("%.*s\n", (int)strlen(pattern), pos);
+                    pos = strstr(pos + strlen(pattern), pattern);
+                }
+            }
+            /* --color : coloriser (NINKAM) */
+            else if (opt_color) {
+                int   len = strlen(pattern);
+                char *pos = ligne;
+                while (*pos) {
+                    if (strncmp(pos, pattern, len) == 0) {
+                        printf("\033[1;31m%s\033[0m", pattern);
+                        pos += len;
+                    } else {
+                        putchar(*pos);
+                        pos++;
+                    }
+                }
+                printf("\n");
+            }
+            /* -h : surligner (VANESSA) */
+            else if (opt_highlight) {
+                int   len = strlen(pattern);
+                char *pos = ligne;
+                while (*pos) {
+                    if (strncmp(pos, pattern, len) == 0) {
+                        printf("[%s]", pattern);
+                        pos += len;
+                    } else {
+                        putchar(*pos);
+                        pos++;
+                    }
+                }
+                printf("\n");
+            }
+            /* -n : numéro de ligne (LESNAR) */
+            else if (opt_num_ligne) {
+                printf("%d: %s\n", numero, ligne);
+            }
+            /* -f : cacher nom fichier (VANESSA) */
+            else if (opt_hide_file) {
+                printf("%s\n", ligne);
+            }
+            /* Affichage normal */
+            else {
+                printf("%s: %s\n", fichier, ligne);
+            }
+
+            /* -m : limite de résultats (TETEYA) */
+            if (opt_max_matches != -1 &&
+                compteur >= opt_max_matches) {
+                fclose(f);
+                return;
+            }
+        }
+    }
+
+    /* -c : afficher le compte final (NINKAM) */
+    if (opt_count)
+        printf("%d\n", compteur);
+
+    /* -L : fichier sans correspondance (TSALA) */
+    if (opt_sans_match && compteur == 0)
+        printf("%s\n", fichier);
+
+    fclose(f);
+}
+
+/* ============================================
+   Fonction principale
+   ============================================ */
 int main(int argc, char *argv[]) {
 
-    /* Vérification arguments minimum */
     if (argc < 2) {
         fprintf(stderr,
-            "Usage: %s [options] <motif> <fichier|dossier>\n",
-            argv[0]);
-        fprintf(stderr, "Options disponibles :\n");
-        fprintf(stderr, "  === TSALA ===\n");
-        fprintf(stderr, "  -e  : motif de recherche\n");
-        fprintf(stderr, "  -o  : afficher uniquement le motif\n");
-        fprintf(stderr, "  -r  : recherche recursive\n");
-        fprintf(stderr, "  -x  : ligne entiere\n");
-        fprintf(stderr, "  -P  : regex Perl\n");
-        fprintf(stderr, "  === VANESSA ===\n");
-        fprintf(stderr, "  -v  : inverser la recherche\n");
-        fprintf(stderr, "  -h  : surligner le motif\n");
-        fprintf(stderr, "  -f  : cacher le nom du fichier\n");
-        fprintf(stderr, "  -z  : recherche donnees nulles\n");
-        fprintf(stderr, "  -E  : regex etendue\n");
-        fprintf(stderr, "  === TETEYA ===\n");
-        fprintf(stderr, "  -i  : ignorer la casse\n");
-        fprintf(stderr, "  -A  : lignes apres\n");
-        fprintf(stderr, "  -B  : lignes avant\n");
-        fprintf(stderr, "  -C  : lignes autour\n");
-        fprintf(stderr, "  -m  : limite resultats\n");
-        fprintf(stderr, "  -b  : offset en octets\n");
-        fprintf(stderr, "  === LESNAR ===\n");
-        fprintf(stderr, "  -n  : numero de ligne\n");
-        fprintf(stderr, "  -l  : nom du fichier\n");
-        fprintf(stderr, "  -s  : supprimer erreurs\n");
-        fprintf(stderr, "  -q  : mode silencieux\n");
-        fprintf(stderr, "  -F  : chaine fixe\n");
-        fprintf(stderr, "  === NINKAM ===\n");
-        fprintf(stderr, "  -c  : compter les lignes correspondantes\n");
-        fprintf(stderr, "  -w  : rechercher un mot entier\n");
-        fprintf(stderr, "  (stdin) : lecture depuis l'entree standard\n");
-        fprintf(stderr, "  (basic) : recherche simple sans option\n");
+            "Usage: %s [options] <motif> <fichier>\n", argv[0]);
+        fprintf(stderr, "  === TSALA   === -e -o -r -R -x -P -L -f\n");
+        fprintf(stderr, "  === VANESSA === -v -h -f -z -E\n");
+        fprintf(stderr, "  === TETEYA  === -i -A -B -C -m -b --include --exclude\n");
+        fprintf(stderr, "  === LESNAR  === -n -l -s -q -F -Z -d -I\n");
+        fprintf(stderr, "  === NINKAM  === -c -w --color --exclude-dir\n");
         return EXIT_FAILURE;
     }
 
+    int   i;
+    char *pattern = NULL;
+    char *cible   = NULL;
+
     /* ============================================
-       TSALA : options -e -r -o -x -P
+       LECTURE DE TOUTES LES OPTIONS
+       La boucle lit TOUS les arguments avant de
+       lancer la recherche → combinaison possible
        ============================================ */
-    int i;
     for (i = 1; i < argc; i++) {
+
+        /* ── TSALA ── */
         if (strcmp(argv[i], "-e") == 0) {
             i++;
             if (i < argc) {
                 motifs[nb_motifs] = argv[i];
                 nb_motifs++;
             }
-        } else if (strcmp(argv[i], "-r") == 0) {
-            opt_recursif = 1;
-        } else if (strcmp(argv[i], "-o") == 0) {
-            opt_occurrence = 1;
-        } else if (strcmp(argv[i], "-x") == 0) {
-            opt_ligne_entiere = 1;
-        } else if (strcmp(argv[i], "-P") == 0) {
-            opt_perl_regex = 1;
-        } else {
-            break;
         }
+        else if (strcmp(argv[i], "-o") == 0) opt_occurrence    = 1;
+        else if (strcmp(argv[i], "-r") == 0) opt_recursif      = 1;
+        else if (strcmp(argv[i], "-R") == 0) opt_liens_sym     = 1;
+        else if (strcmp(argv[i], "-x") == 0) opt_ligne_entiere = 1;
+        else if (strcmp(argv[i], "-P") == 0) opt_perl_regex    = 1;
+        else if (strcmp(argv[i], "-L") == 0) opt_sans_match    = 1;
+        else if (strcmp(argv[i], "-f") == 0) {
+            i++;
+            if (i < argc) opt_fichier_motifs = argv[i];
+        }
+
+        /* ── VANESSA ── */
+        else if (strcmp(argv[i], "-v") == 0) opt_invert    = 1;
+        else if (strcmp(argv[i], "-h") == 0) opt_highlight = 1;
+        else if (strcmp(argv[i], "-z") == 0) opt_null_data = 1;
+        else if (strcmp(argv[i], "-E") == 0) opt_ext_regex = 1;
+
+        /* ── TETEYA ── */
+        else if (strcmp(argv[i], "-i") == 0) opt_ignore_case = 1;
+        else if (strcmp(argv[i], "-A") == 0) {
+            i++;
+            if (i < argc) opt_after = atoi(argv[i]);
+        }
+        else if (strcmp(argv[i], "-B") == 0) {
+            i++;
+            if (i < argc) opt_before = atoi(argv[i]);
+        }
+        else if (strcmp(argv[i], "-C") == 0) {
+            i++;
+            if (i < argc) {
+                opt_after  = atoi(argv[i]);
+                opt_before = atoi(argv[i]);
+            }
+        }
+        else if (strcmp(argv[i], "-m") == 0) {
+            i++;
+            if (i < argc) opt_max_matches = atoi(argv[i]);
+        }
+        else if (strcmp(argv[i], "-b") == 0) opt_byte_offset = 1;
+        else if (strcmp(argv[i], "--include") == 0) {
+            i++;
+            if (i < argc) opt_include = argv[i];
+        }
+        else if (strcmp(argv[i], "--exclude") == 0) {
+            i++;
+            if (i < argc) opt_exclude = argv[i];
+        }
+
+        /* ── LESNAR ── */
+        else if (strcmp(argv[i], "-n") == 0) opt_num_ligne = 1;
+        else if (strcmp(argv[i], "-l") == 0) opt_nom_fich  = 1;
+        else if (strcmp(argv[i], "-s") == 0) opt_silence   = 1;
+        else if (strcmp(argv[i], "-F") == 0) opt_fixe      = 1;
+        else if (strcmp(argv[i], "-q") == 0) opt_quiet     = 1;
+        else if (strcmp(argv[i], "-Z") == 0) opt_null_char = 1;
+        else if (strcmp(argv[i], "-d") == 0) opt_dossier   = 1;
+        else if (strcmp(argv[i], "-I") == 0) opt_binaire   = 1;
+
+        /* ── NINKAM ── */
+        else if (strcmp(argv[i], "-c") == 0) opt_count = 1;
+        else if (strcmp(argv[i], "-w") == 0) opt_word  = 1;
+        else if (strcmp(argv[i], "--color") == 0) opt_color = 1;
+        else if (strcmp(argv[i], "--exclude-dir") == 0) {
+            i++;
+            if (i < argc) opt_exclude_dir = argv[i];
+        }
+
+        /* ── Motif et cible ── */
+        else if (pattern == NULL) pattern = argv[i];
+        else                      cible   = argv[i];
     }
 
-    /* Si motifs trouvés → lancer fonctions Tsala */
-    if (nb_motifs > 0) {
-        if (opt_recursif)
-            rechercher_recursif(argv[argc - 1]);
-        else
-            rechercher_fichier(argv[argc - 1]);
+    /* ============================================
+       Si -e utilisé → motif vient du tableau
+       ============================================ */
+    if (nb_motifs > 0 && pattern == NULL)
+        pattern = motifs[0];
+
+    /* ============================================
+       Si -f utilisé → charger motifs depuis fichier
+       ============================================ */
+    if (opt_fichier_motifs != NULL) {
+        charger_motifs_fichier(opt_fichier_motifs);
+        if (pattern == NULL && nb_motifs > 0)
+            pattern = motifs[0];
+    }
+
+    /* ============================================
+       stdin : pas de fichier fourni
+       ============================================ */
+    if (pattern != NULL && cible == NULL) {
+        ninkam_stdin(pattern);
         return EXIT_SUCCESS;
     }
 
-    /* ============================================
-       Récupération flag et pattern
-       ============================================ */
-    char *flag    = argv[1];
-    char *pattern = argv[2];
-    char *cible   = argv[argc - 1];
-
-    /* ============================================
-       NINKAM : stdin - pas de fichier
-       ============================================ */
-    if (argc == 2) {
-        ninkam_stdin(argv[1]);
-        return EXIT_SUCCESS;
-    }
-
-    /* ============================================
-       NINKAM : -c compter les lignes
-       ============================================ */
-    if (strcmp(flag, "-c") == 0) {
-        ninkam_count(pattern, cible);
-        return EXIT_SUCCESS;
-    }
-
-    /* ============================================
-       NINKAM : -w mot entier
-       ============================================ */
-    if (strcmp(flag, "-w") == 0) {
-        ninkam_word(pattern, cible);
-        return EXIT_SUCCESS;
-    }
-
-    /* ============================================
-       VANESSA : -r recherche recursive
-       ============================================ */
-    if (strcmp(flag, "-r") == 0) {
-        recursive_search(cible, pattern);
-        return EXIT_SUCCESS;
-    }
-
-    /* ============================================
-       VANESSA : -l label
-       ============================================ */
-    if (strcmp(flag, "-l") == 0 && argc == 5) {
-        FILE *f = fopen(argv[3], "r");
-        if (!f) { perror("Erreur fichier"); return EXIT_FAILURE; }
-        label(argv[4], pattern, f);
-        fclose(f);
-        return EXIT_SUCCESS;
-    }
-
-    /* ============================================
-       VANESSA : -z null data
-       ============================================ */
-    if (strcmp(flag, "-z") == 0) {
-        FILE *f = fopen(cible, "rb");
-        if (!f) { perror("Erreur fichier"); return EXIT_FAILURE; }
-        null_data(pattern, f);
-        fclose(f);
-        return EXIT_SUCCESS;
-    }
-
-    /* ============================================
-       TETEYA : -i -A -B -C -m -b --include --exclude
-       ============================================ */
-    if (strcmp(flag, "-i")        == 0 ||
-        strcmp(flag, "-A")        == 0 ||
-        strcmp(flag, "-B")        == 0 ||
-        strcmp(flag, "-C")        == 0 ||
-        strcmp(flag, "-m")        == 0 ||
-        strcmp(flag, "-b")        == 0 ||
-        strcmp(flag, "--include") == 0 ||
-        strcmp(flag, "--exclude") == 0) {
-        teteya_search(argc, argv);
-        return EXIT_SUCCESS;
-    }
-
-    /* ============================================
-       LESNAR : -n -s -F -q -Z -d -I
-       ============================================ */
-    if (strcmp(flag, "-n") == 0 ||
-        strcmp(flag, "-s") == 0 ||
-        strcmp(flag, "-F") == 0 ||
-        strcmp(flag, "-q") == 0 ||
-        strcmp(flag, "-Z") == 0 ||
-        strcmp(flag, "-d") == 0 ||
-        strcmp(flag, "-I") == 0) {
-        lesnar_search(argc, argv);
-        return EXIT_SUCCESS;
-    }
-
-    /* ============================================
-       VANESSA : -v -h -f -c -E
-       ============================================ */
-    FILE *f = fopen(cible, "r");
-    if (f == NULL) {
-        perror("Erreur ouverture fichier");
+    if (pattern == NULL || cible == NULL) {
+        fprintf(stderr, "Erreur : motif ou fichier manquant\n");
         return EXIT_FAILURE;
     }
 
-    if      (strcmp(flag, "-v") == 0) invert_match(pattern, f);
-    else if (strcmp(flag, "-h") == 0) highlight(pattern, f);
-    else if (strcmp(flag, "-f") == 0) hide_filename(pattern, f);
-    else if (strcmp(flag, "-E") == 0) extended_regex(pattern, f);
-
     /* ============================================
-       NINKAM : recherche simple sans option
+       LANCEMENT DE LA RECHERCHE
        ============================================ */
-    else {
-        fclose(f);
-        ninkam_search(pattern, cible);
+
+    /* -R : récursif avec liens symboliques (TSALA) */
+    if (opt_liens_sym) {
+        rechercher_recursif_R(cible);
         return EXIT_SUCCESS;
     }
 
-    fclose(f);
+    /* -r : récursif normal (TSALA) */
+    if (opt_recursif) {
+        rechercher_recursif(cible);
+        return EXIT_SUCCESS;
+    }
+
+    /* --exclude-dir : récursif avec exclusion (NINKAM) */
+    if (opt_exclude_dir != NULL) {
+        ninkam_exclude_dir(cible, pattern, opt_exclude_dir);
+        return EXIT_SUCCESS;
+    }
+
+    /* Recherche combinée dans le fichier */
+    recherche_combinee(pattern, cible);
+
     return EXIT_SUCCESS;
 }

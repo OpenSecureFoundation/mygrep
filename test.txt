@@ -1,6 +1,67 @@
-erreur de connexion detectee
-Le serveur fonctionne normalement
-Erreur critique sur le port 8080
-connexion etablie avec succes
-erreur mineure ignoree
-Fin du fichier log
+[INFO] Application started successfully
+[INFO] User admin connected
+[INFO] User guest connected
+
+[DEBUG] Loading configuration file
+[DEBUG] Reading database settings
+[DEBUG] Database connection established
+
+[WARNING] Disk usage reached 80%
+[WARNING] Memory usage is high
+
+[ERROR] Failed to open file config.ini
+[ERROR] Failed to connect to database
+[ERROR] Invalid password provided
+
+main function initialized
+Main Function Initialized
+MAIN FUNCTION INITIALIZED
+
+User: alice
+User: bob
+User: charlie
+
+IP: 192.168.1.10
+IP: 192.168.1.11
+IP: 10.0.0.5
+
+Port: 8080
+Port: 443
+Port: 22
+
+Path: /home/admin/project
+Path: /etc/nginx/nginx.conf
+Path: /var/log/syslog
+
+grep is useful
+grep is powerful
+mygrep project
+
+hello world
+Hello World
+HELLO WORLD
+
+12345
+67890
+98765
+
+abc123
+xyz789
+
+network timeout occurred
+connection timeout occurred
+server timeout occurred
+
+SUCCESS
+FAILED
+SUCCESS
+FAILED
+
+exact_line
+exact_line
+exact_line
+
+special_characters: @#$%^&*()
+email: test@example.com
+
+End of log file

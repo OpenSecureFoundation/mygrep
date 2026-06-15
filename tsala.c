@@ -9,10 +9,13 @@
 #define MAX_MOTIFS 10
 
 /* Variables globales */
-int opt_recursif      = 0;  /* -r */
-int opt_occurrence    = 0;  /* -o */
-int opt_ligne_entiere = 0;  /* -x */
-int opt_perl_regex    = 0;  /* -P */
+int opt_recursif         = 0;  /* -r */
+int opt_occurrence       = 0;  /* -o */
+int opt_ligne_entiere    = 0;  /* -x */
+int opt_perl_regex       = 0;  /* -P */
+int opt_sans_match       = 0;  /* -L */
+int opt_liens_sym        = 0;  /* -R */
+char *opt_fichier_motifs = NULL; /* -f */
 
 char *motifs[MAX_MOTIFS];
 int   nb_motifs = 0;
@@ -137,4 +140,88 @@ void rechercher_recursif(const char *dossier) {
     closedir(dir);
 }
 
+/* ============================================
+   -L : afficher fichiers SANS correspondance
+   ============================================ */
+void rechercher_fichier_L(const char *fichier) {
+    FILE *f;
+    char  ligne[MAX_LIGNE];
+    int   trouve = 0;
 
+    f = fopen(fichier, "r");
+    if (f == NULL) {
+        perror("Erreur ouverture fichier");
+        return;
+    }
+
+    while (fgets(ligne, sizeof(ligne), f) != NULL) {
+        ligne[strcspn(ligne, "\n")] = '\0';
+        if (correspond(ligne)) {
+            trouve = 1;
+            break;
+        }
+    }
+
+    fclose(f);
+
+    if (!trouve)
+        printf("%s\n", fichier);
+}
+
+/* ============================================
+   -R : récursif (version compatible Windows)
+   Même comportement que -r sur Windows
+   ============================================ */
+void rechercher_recursif_R(const char *dossier) {
+    DIR           *dir;
+    struct dirent *entree;
+    struct stat    info;
+    char           chemin[MAX_LIGNE];
+
+    dir = opendir(dossier);
+    if (dir == NULL) {
+        perror("Erreur ouverture dossier");
+        return;
+    }
+
+    while ((entree = readdir(dir)) != NULL) {
+        if (strcmp(entree->d_name, ".") == 0 ||
+            strcmp(entree->d_name, "..") == 0)
+            continue;
+
+        snprintf(chemin, sizeof(chemin), "%s/%s",
+                 dossier, entree->d_name);
+
+        /* stat() suffit sur Windows */
+        if (stat(chemin, &info) == 0) {
+            if (S_ISDIR(info.st_mode))
+                rechercher_recursif_R(chemin);
+            else if (S_ISREG(info.st_mode))
+                rechercher_fichier(chemin);
+        }
+    }
+    closedir(dir);
+}
+
+/* ============================================
+   -f : lire les motifs depuis un fichier
+   ============================================ */
+void charger_motifs_fichier(const char *fichier_motifs) {
+    FILE *f;
+    char  ligne[MAX_LIGNE];
+
+    f = fopen(fichier_motifs, "r");
+    if (f == NULL) {
+        perror("Erreur ouverture fichier motifs");
+        return;
+    }
+
+    while (fgets(ligne, sizeof(ligne), f) != NULL) {
+        ligne[strcspn(ligne, "\n")] = '\0';
+        if (strlen(ligne) > 0 && nb_motifs < MAX_MOTIFS) {
+            motifs[nb_motifs] = strdup(ligne);
+            nb_motifs++;
+        }
+    }
+    fclose(f);
+}
