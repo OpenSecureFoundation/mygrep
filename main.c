@@ -227,11 +227,39 @@ int main(int argc, char *argv[]) {
     if (argc < 2) {
         fprintf(stderr,
             "Usage: %s [options] <motif> <fichier>\n", argv[0]);
-        fprintf(stderr, "  === TSALA   === -e -o -r -R -x -P -L -f\n");
-        fprintf(stderr, "  === VANESSA === -v -h -f -z -E\n");
-        fprintf(stderr, "  === TETEYA  === -i -A -B -C -m -b --include --exclude\n");
-        fprintf(stderr, "  === LESNAR  === -n -l -s -q -F -Z -d -I\n");
-        fprintf(stderr, "  === NINKAM  === -c -w --color --exclude-dir\n");
+      fprintf(stderr, "Options disponibles :\n");
+        
+        fprintf(stderr, "  -e  : motif de recherche\n");
+        fprintf(stderr, "  -o  : afficher uniquement le motif\n");
+        fprintf(stderr, "  -r  : recherche recursive\n");
+        fprintf(stderr, "  -x  : ligne entiere\n");
+        fprintf(stderr, "  -P  : regex Perl\n");
+      
+        fprintf(stderr, "  -v  : inverser la recherche\n");
+        fprintf(stderr, "  -h  : surligner le motif\n");
+        fprintf(stderr, "  -f  : cacher le nom du fichier\n");
+        fprintf(stderr, "  -z  : recherche donnees nulles\n");
+        fprintf(stderr, "  -E  : regex etendue\n");
+        
+        fprintf(stderr, "  -i  : ignorer la casse\n");
+        fprintf(stderr, "  -A  : lignes apres\n");
+        fprintf(stderr, "  -B  : lignes avant\n");
+        fprintf(stderr, "  -C  : lignes autour\n");
+        fprintf(stderr, "  -m  : limite resultats\n");
+        fprintf(stderr, "  -b  : offset en octets\n");
+        
+        fprintf(stderr, "  -n  : numero de ligne\n");
+        fprintf(stderr, "  -l  : nom du fichier\n");
+        fprintf(stderr, "  -s  : supprimer erreurs\n");
+        fprintf(stderr, "  -q  : mode silencieux\n");
+        fprintf(stderr, "  -F  : chaine fixe\n");
+        fprintf(stderr, "  -Z  : afficher avec null\n");
+        fprintf(stderr, "  -d  : gestion dossiers\n");
+        fprintf(stderr, "  -I  : ignorer fichiers binaires\n");
+       
+        fprintf(stderr, "  -c  : compter les lignes\n");
+        fprintf(stderr, "  -w  : mot entier\n");
+        fprintf(stderr, "  (stdin) : lecture depuis stdin\n");
         return EXIT_FAILURE;
     }
 
